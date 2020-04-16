@@ -13,23 +13,35 @@ void Service::on_finish()
     delete this;
 }
 
+void Service::cleanup()
+{
+    m_response.clear();
+
+    m_nickname.clear();
+    m_password.clear();
+    m_contact_nickname.clear();
+    m_contact_time.clear();
+    m_contact_date.clear();
+    m_list.clear();
+}
+
 void Service::start_handling()
 {
     boost::asio::async_read_until(*m_socket.get(), m_request, "\r\n\r\n",
                                   [this](const boost::system::error_code& ec, std::size_t bytes_transferred)
     {
-        on_request_received(ec);
+        on_request_received(ec, bytes_transferred);
     });
 }
 
-void Service::on_request_received(const boost::system::error_code& ec)
+void Service::on_request_received(const boost::system::error_code& ec, std::size_t bytes_transferred)
 {
     if(ec.value() != 0) {
         qDebug() << "Error occured! Message: " << ec.message().data();
         on_finish();
         return;
     } else {
-        parse_request();
+        parse_request(bytes_transferred);
         m_res_code = process_data();
         m_response = create_response();
 
@@ -41,10 +53,13 @@ void Service::on_request_received(const boost::system::error_code& ec)
     }
 }
 
-void Service::parse_request()
+void Service::parse_request(std::size_t bytes_transferred)
 {
-    auto j_doc = QJsonDocument::fromJson((char*)m_request.data().data());
-    m_request.consume(UINT_MAX);
+    std::string data((const char*)m_request.data().data(), bytes_transferred - 4);
+    auto j_doc = QJsonDocument::fromJson(data.c_str());
+    m_request.consume(bytes_transferred);
+
+//    qDebug() << "Raw data: " << QString::fromStdString(data);
 
     if(!j_doc.isEmpty()) {
         auto j_obj = j_doc.object();
@@ -83,6 +98,18 @@ Service::Response_code Service::process_data()
         return process_get_unregistered_contacts();
     }
 
+    case Request_code::get_registered_contacts: {
+        return process_get_registered_contacts();
+    }
+
+    case Request_code::remove_unregister_contact: {
+        return process_remove_unregister_contact();
+    }
+
+    case Request_code::remove_register_contact: {
+        return process_remove_registered_contact();
+    }
+
     }
 }
 
@@ -92,37 +119,23 @@ const char* Service::create_response()
     j_obj.insert("response", (int)m_res_code);
 
     if(m_res_code == Response_code::unregistered_list) {
-
-        auto pairs_list = m_list.split(',', QString::SkipEmptyParts);
-
-        QVector<QJsonObject> contacts_list;
-        contacts_list.reserve(pairs_list.size());
-
-        for(int i = 0; i < pairs_list.size(); ++i) {
-            auto pair = pairs_list[i].split('-', QString::SkipEmptyParts);
-            QJsonObject contact;
-            contact.insert("nickname", pair[0]);
-            contact.insert("time", pair[1]);
-            contacts_list.push_back(contact);
-        }
-
-        QJsonArray j_arr_of_contacts;
-        for(int i = 0; i < contacts_list.size(); ++i) {
-            j_arr_of_contacts.append(contacts_list[i]);
-        }
-
-        j_obj.insert("unregistered_list", j_arr_of_contacts);
+        insert_arr_of_contacts_in_jobj(j_obj, "unregistered_list");
     }
 
+    if(m_res_code == Response_code::registered_list) {
+        insert_arr_of_contacts_in_jobj(j_obj, "registered_list");
+    }
+
+
     QJsonDocument j_doc(j_obj);
-    qDebug() << j_doc.toJson().data();
+    qDebug() << "Response: " << j_doc.toJson().data();
     return j_doc.toJson().append("\r\n\r\n");
 }
 
 void Service::on_response_sent(const boost::system::error_code& ec)
 {
     if(ec.value() == 0) {
-        m_response.clear();
+        cleanup();
         start_handling();
     } else {
         on_finish();
@@ -255,4 +268,117 @@ Service::Response_code Service::process_get_unregistered_contacts()
         return Response_code::internal_server_error;
     }
 
+}
+
+Service::Response_code Service::process_get_registered_contacts()
+{
+    QString str_qry = QString("select registered_contacts from %1 where date = '%2'")
+            .arg(QString::fromStdString(m_nickname)).arg(QString::fromStdString(m_contact_date));
+
+    if(m_qry.exec(str_qry)) {
+
+        while(m_qry.next()) {
+            m_list = m_qry.value(0).toString();
+        }
+        return Response_code::registered_list;
+
+    } else {
+        return Response_code::internal_server_error;
+    }
+
+}
+
+Service::Response_code Service::process_remove_unregister_contact()
+{
+    QString str_qry = QString("select unregistered_contacts from %1 where date = '%2'")
+            .arg(QString::fromStdString(m_nickname)).arg(QString::fromStdString(m_contact_date));
+
+    if(m_qry.exec(str_qry)) {
+
+        while(m_qry.next()) {
+            m_list = m_qry.value(0).toString();
+        }
+
+        QString find_contact = "," + QString::fromStdString(m_contact_nickname)
+                               + "-" + QString::fromStdString(m_contact_time);
+
+        qDebug() << "Before removing: " << m_list;
+        auto old_str = m_list;
+        m_list = m_list.remove(find_contact);
+        qDebug() << "After removing: " << m_list;
+
+        str_qry = QString("update %1 set unregistered_contacts = '%2' where date = '%3'")
+                .arg(QString::fromStdString(m_nickname)).arg(m_list)
+                .arg(QString::fromStdString(m_contact_date));
+
+        if(m_qry.exec(str_qry)) {
+            return Response_code::success_unregister_contact_deletion;
+        } else {
+            return Response_code::unregister_contact_deletion_failure;
+        }
+
+    } else {
+        return Response_code::internal_server_error;
+    }
+
+}
+
+Service::Response_code Service::process_remove_registered_contact()
+{
+    QString str_qry = QString("select registered_contacts from %1 where date = '%2'")
+            .arg(QString::fromStdString(m_nickname)).arg(QString::fromStdString(m_contact_date));
+
+    qDebug() << "qry: " << str_qry;
+
+
+    if(m_qry.exec(str_qry)) {
+
+        while(m_qry.next()) {
+            m_list = m_qry.value(0).toString();
+        }
+
+        QString find_contact = "," + QString::fromStdString(m_contact_nickname)
+                               + "-" + QString::fromStdString(m_contact_time);
+
+        qDebug() << "Before removing: " << m_list;
+        auto old_str = m_list;
+        m_list = m_list.remove(find_contact);
+        qDebug() << "After removing: " << m_list;
+
+        str_qry = QString("update %1 set registered_contacts = '%2' where date = '%3'")
+                .arg(QString::fromStdString(m_nickname)).arg(m_list)
+                .arg(QString::fromStdString(m_contact_date));
+
+        if(m_qry.exec(str_qry)) {
+            return Response_code::success_register_contact_deletion;
+        } else {
+            return Response_code::register_contact_deletion_failure;
+        }
+
+    } else {
+        return Response_code::internal_server_error;
+    }
+}
+
+void Service::insert_arr_of_contacts_in_jobj(QJsonObject& j_obj, const QString& reg_or_unreg_list_key_word)
+{
+    auto pairs_list = m_list.split(',', QString::SkipEmptyParts);
+
+    QVector<QJsonObject> contacts_list;
+    contacts_list.reserve(pairs_list.size());
+
+    for(int i = 0; i < pairs_list.size(); ++i) {
+        auto pair = pairs_list[i].split('-', QString::SkipEmptyParts);
+        QJsonObject contact;
+        contact.insert("nickname", pair[0]);
+        contact.insert("time", pair[1]);
+        contacts_list.push_back(contact);
+    }
+
+    QJsonArray j_arr_of_contacts;
+    for(int i = 0; i < contacts_list.size(); ++i) {
+        j_arr_of_contacts.append(contacts_list[i]);
+    }
+
+    j_obj.insert(reg_or_unreg_list_key_word, j_arr_of_contacts);
 }
