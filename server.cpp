@@ -1,7 +1,13 @@
 #include "server.h"
 
-Server::Server() {
+Server::Server(QObject* parent)
+    : QObject(parent)
+{
     m_work.reset(new boost::asio::io_service::work(m_ios));
+
+//    connect(&m_timer, &QTimer::timeout, this, &Server::daily_script);
+//    m_timer.start(1000);
+    daily_script();
 }
 
 void Server::open_db(QSqlDatabase& db, const QString &name, const QString &host_name, const QString &user_name, const QString &password, int port)
@@ -47,9 +53,54 @@ void Server::start(unsigned short server_port_number, std::size_t thread_pool_si
     }
 }
 
-void Server::join_threads()
+void Server::detach_threads()
 {
     for(std::size_t i = 0; i <  m_count_of_threads; ++i) {
-        m_thread_pool[i]->join();
+        m_thread_pool[i]->detach();
     }
+}
+
+void Server::daily_script()
+{
+    open_db(m_db, "mhc_db", "localhost", "postgres", "4952211285", 5432);
+
+    QString select_all_users_str_qry = QString("select user_name from main");
+    QSqlQuery qry(m_db);
+    QVector<QString> all_users;
+
+    if(qry.exec(select_all_users_str_qry)) {
+
+        while(qry.next()) {
+            all_users.push_back(qry.value(0).toString());
+        }
+
+        qDebug() << "All users:";
+        for(auto& i : all_users) {
+            qDebug() << i;
+        }
+
+        QString delete_date_str = QDate::currentDate().addDays(-14).toString("dd.MM.yy");
+        QString delete_row_str_qry = QString("delete from %1 where date = '%2'");
+
+        qDebug() << "All delete qrys:";
+        for(int i = 0; i < all_users.size(); ++i) {
+            QString qry_str = delete_row_str_qry.arg(all_users[i]).arg(delete_date_str);
+            qDebug() << qry_str;
+            qry.exec(qry_str);
+        }
+
+        QString insert_date_str = QDate::currentDate().toString("dd.MM.yy");
+        QString insert_row_qry = QString("insert into %1 (date, registered_contacts, unregistered_contacts) values ('%2', '', '')");
+
+        qDebug() << "All insert qrys:";
+        for(int i = 0; i < all_users.size(); ++i) {
+            QString qry_str = insert_row_qry.arg(all_users[i]).arg(insert_date_str);
+            qDebug() << qry_str;
+            qry.exec(qry_str);
+        }
+
+    } else {
+        //
+    }
+
 }

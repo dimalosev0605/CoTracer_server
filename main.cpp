@@ -8,7 +8,10 @@ int main(int argc, char *argv[])
 
     Server server;
     server.start(1234, 2, "mhc_db", "localhost", "postgres", "4952211285", 5432);
-    server.join_threads();
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    server.detach_threads();
 
     return a.exec();
 }
