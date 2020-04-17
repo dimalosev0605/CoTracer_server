@@ -73,6 +73,7 @@ void Server::daily_script()
         while(qry.next()) {
             all_users.push_back(qry.value(0).toString());
         }
+        if(all_users.isEmpty()) return;
 
         qDebug() << "All users:";
         for(auto& i : all_users) {
@@ -92,15 +93,25 @@ void Server::daily_script()
         QString insert_date_str = QDate::currentDate().toString("dd.MM.yy");
         QString insert_row_qry = QString("insert into %1 (date, registered_contacts, unregistered_contacts) values ('%2', '', '')");
 
-        qDebug() << "All insert qrys:";
-        for(int i = 0; i < all_users.size(); ++i) {
-            QString qry_str = insert_row_qry.arg(all_users[i]).arg(insert_date_str);
-            qDebug() << qry_str;
-            qry.exec(qry_str);
+
+        //
+        QString check_today = QString("select date from %1 where date = '%2'")
+                .arg(all_users.first()).arg(insert_date_str);
+        if(qry.exec(check_today)) {
+            if(!qry.size()) {
+                qDebug() << "All insert qrys:";
+                for(int i = 0; i < all_users.size(); ++i) {
+                    QString qry_str = insert_row_qry.arg(all_users[i]).arg(insert_date_str);
+                    qDebug() << qry_str;
+                    qry.exec(qry_str);
+                }
+            }
         }
+        //
 
     } else {
         //
     }
 
 }
+
