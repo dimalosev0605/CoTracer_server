@@ -38,9 +38,7 @@ class Service
         unregistered_list,
         registered_list,
         success_unregister_contact_deletion,
-        unregister_contact_deletion_failure,
         success_register_contact_deletion,
-        register_contact_deletion_failure
     };
 
     std::shared_ptr<boost::asio::ip::tcp::socket> m_socket;

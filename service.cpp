@@ -55,11 +55,12 @@ void Service::on_request_received(const boost::system::error_code& ec, std::size
 
 void Service::parse_request(std::size_t bytes_transferred)
 {
-    std::string data((const char*)m_request.data().data(), bytes_transferred - 4);
+    std::string data = std::string{boost::asio::buffers_begin(m_request.data()),
+                                boost::asio::buffers_begin(m_request.data()) + bytes_transferred - 4};
     auto j_doc = QJsonDocument::fromJson(data.c_str());
     m_request.consume(bytes_transferred);
 
-//    qDebug() << "Raw data: " << QString::fromStdString(data);
+    qDebug() << "Raw data: " << QString::fromStdString(data);
 
     if(!j_doc.isEmpty()) {
         auto j_obj = j_doc.object();
@@ -314,7 +315,7 @@ Service::Response_code Service::process_remove_unregister_contact()
         if(m_qry.exec(str_qry)) {
             return Response_code::success_unregister_contact_deletion;
         } else {
-            return Response_code::unregister_contact_deletion_failure;
+            return Response_code::internal_server_error;
         }
 
     } else {
@@ -352,7 +353,7 @@ Service::Response_code Service::process_remove_registered_contact()
         if(m_qry.exec(str_qry)) {
             return Response_code::success_register_contact_deletion;
         } else {
-            return Response_code::register_contact_deletion_failure;
+            return Response_code::internal_server_error;
         }
 
     } else {
