@@ -23,6 +23,7 @@ void Service::cleanup()
     m_contact_time.clear();
     m_contact_date.clear();
     m_list.clear();
+    m_contacts_for_14_days.clear();
 }
 
 void Service::start_handling()
@@ -43,7 +44,9 @@ void Service::on_request_received(const boost::system::error_code& ec, std::size
     } else {
         parse_request(bytes_transferred);
         m_res_code = process_data();
-        m_response = create_response();
+        create_response();
+
+//        qDebug() << "m_response: " << m_response.c_str();
 
         boost::asio::async_write(*m_socket.get(), boost::asio::buffer(m_response),
                                  [this](const boost::system::error_code& ec, std::size_t bytes_transferred)
@@ -60,7 +63,7 @@ void Service::parse_request(std::size_t bytes_transferred)
     auto j_doc = QJsonDocument::fromJson(data.c_str());
     m_request.consume(bytes_transferred);
 
-    qDebug() << "Raw data: " << QString::fromStdString(data);
+//    qDebug() << "Raw data: " << QString::fromStdString(data);
 
     if(!j_doc.isEmpty()) {
         auto j_obj = j_doc.object();
@@ -111,10 +114,13 @@ Service::Response_code Service::process_data()
         return process_remove_registered_contact();
     }
 
+    case Request_code::stats_for_14_days: {
+        return process_stats_for_14_days();
+    }
     }
 }
 
-const char* Service::create_response()
+void Service::create_response()
 {
     QJsonObject j_obj;
     j_obj.insert("response", (int)m_res_code);
@@ -127,10 +133,17 @@ const char* Service::create_response()
         insert_arr_of_contacts_in_jobj(j_obj, "registered_list");
     }
 
+    if(m_res_code == Response_code::success_fetch_stats_for_14_days) {
+        insert_stats_arr(j_obj);
+    }
+
 
     QJsonDocument j_doc(j_obj);
-    qDebug() << "Response: " << j_doc.toJson().data();
-    return j_doc.toJson().append("\r\n\r\n");
+//    qDebug() << "Response: " << j_doc.toJson().data();
+
+    std::string s = j_doc.toJson().data();
+    s += "\r\n\r\n";
+    m_response = s;
 }
 
 void Service::on_response_sent(const boost::system::error_code& ec)
@@ -361,6 +374,100 @@ Service::Response_code Service::process_remove_registered_contact()
     }
 }
 
+Service::Response_code Service::process_stats_for_14_days()
+{
+    QString str_qry = QString("select date from %1").arg(QString::fromStdString(m_nickname));
+
+    if(m_qry.exec(str_qry)) {
+
+        QVector<QString> dates;
+        while(m_qry.next()) {
+            dates.push_back(m_qry.value(0).toString());
+        }
+        if(dates.isEmpty()) return Response_code::internal_server_error;
+
+//        qDebug() << "ALL dates:";
+//        for(auto& i : dates) {
+//            qDebug() << i;
+//        }
+
+        for(int i = 0; i < dates.size(); ++i) {
+            m_unique_reg_contacts.insert(QString::fromStdString(m_nickname));
+            if(!count_contacts_recursively(dates[i], QString::fromStdString(m_nickname))) {
+                m_unique_reg_contacts.clear();
+                m_unreg_contacts_counter = 0;
+                return Response_code::internal_server_error;
+            }
+
+//            qDebug() << "STAT FOR DATE " << dates[i];
+//            qDebug() << "Unreg contacts: " << m_unreg_counter;
+
+            m_unique_reg_contacts.erase(QString::fromStdString(m_nickname));
+//            qDebug() << "Reg contacts: " << m_unique_reg_contacts.size();
+            m_contacts_for_14_days.push_back(std::make_tuple(dates[i], m_unique_reg_contacts.size(), m_unreg_contacts_counter));
+
+            m_unreg_contacts_counter = 0;
+            m_unique_reg_contacts.clear();
+        }
+
+        qDebug() << "STATS:";
+        for(auto& i : m_contacts_for_14_days) {
+            qDebug() << std::get<0>(i) << " - " << std::get<1>(i) << " - " << std::get<2>(i);
+        }
+
+        return Response_code::success_fetch_stats_for_14_days;
+
+    } else {
+        return Response_code::internal_server_error;
+    }
+}
+
+bool Service::count_contacts_recursively(const QString& date, const QString& nick)
+{
+//    qDebug() << "in f(): date = " << date << ", nick = " << nick;
+
+    QString str_qry = QString("select unregistered_contacts from %1 where date = '%2'").arg(nick).arg(date);
+    m_qry.exec(str_qry);
+    while(m_qry.next()) {
+        m_list = m_qry.value(0).toString();
+    }
+
+    auto unreg_list = m_list.split(',', QString::SkipEmptyParts);
+    m_unreg_contacts_counter += unreg_list.size();
+
+//    qDebug() << "Unreg count = " << unreg_list.size();
+
+    str_qry = QString("select registered_contacts from %1 where date = '%2'").arg(nick).arg(date);
+    m_qry.exec(str_qry);
+    while(m_qry.next()) {
+        m_list = m_qry.value(0).toString();
+    }
+    auto reg_list_pairs = m_list.split(',', QString::SkipEmptyParts);
+
+    QVector<QString> reg_contacts_list;
+    for(int i = 0; i < reg_list_pairs.size(); ++i) {
+        auto pair = reg_list_pairs[i].split('-', QString::SkipEmptyParts);
+        reg_contacts_list.push_back(pair[0]);
+    }
+
+//    qDebug() << "Reg count = " << reg_contacts_list.size();
+//    qDebug() << "REGISTRED CONTACTS LIST:";
+//    for(auto& i : reg_contacts_list) {
+//        qDebug() << i;
+//    }
+
+    for(int i = 0; i < reg_contacts_list.size(); ++i) {
+        if(m_unique_reg_contacts.find(reg_contacts_list[i]) == m_unique_reg_contacts.end()) {
+            m_unique_reg_contacts.insert(reg_contacts_list[i]);
+            if(!count_contacts_recursively(date, reg_contacts_list[i])) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 void Service::insert_arr_of_contacts_in_jobj(QJsonObject& j_obj, const QString& reg_or_unreg_list_key_word)
 {
     auto pairs_list = m_list.split(',', QString::SkipEmptyParts);
@@ -382,4 +489,19 @@ void Service::insert_arr_of_contacts_in_jobj(QJsonObject& j_obj, const QString& 
     }
 
     j_obj.insert(reg_or_unreg_list_key_word, j_arr_of_contacts);
+}
+
+void Service::insert_stats_arr(QJsonObject& j_obj)
+{
+    QJsonArray j_stats_arr;
+
+    for(int i = 0; i < m_contacts_for_14_days.size(); ++i) {
+        QJsonObject day_stat;
+        day_stat.insert("date", std::get<0>(m_contacts_for_14_days[i]));
+        day_stat.insert("reg_qnt", std::get<1>(m_contacts_for_14_days[i]));
+        day_stat.insert("unreg_qnt", std::get<2>(m_contacts_for_14_days[i]));
+        j_stats_arr.append(day_stat);
+    }
+
+    j_obj.insert("stat", j_stats_arr);
 }

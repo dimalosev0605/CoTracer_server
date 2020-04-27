@@ -14,6 +14,8 @@
 
 #include <boost/asio.hpp>
 
+#include <set>
+
 class Service
 {
     enum class Request_code: int {
@@ -24,7 +26,8 @@ class Service
         get_unregistered_contacts,
         get_registered_contacts,
         remove_unregister_contact,
-        remove_register_contact
+        remove_register_contact,
+        stats_for_14_days
     };
 
     enum class Response_code: int {
@@ -39,6 +42,7 @@ class Service
         registered_list,
         success_unregister_contact_deletion,
         success_register_contact_deletion,
+        success_fetch_stats_for_14_days
     };
 
     std::shared_ptr<boost::asio::ip::tcp::socket> m_socket;
@@ -56,6 +60,10 @@ class Service
     std::string m_contact_date;
     QString m_list;
 
+    std::set<QString> m_unique_reg_contacts;
+    int m_unreg_contacts_counter = 0;
+    QVector<std::tuple<QString, int , int>> m_contacts_for_14_days; // date, reg, unreg.
+
     QSqlQuery m_qry;
 
 private:
@@ -67,7 +75,7 @@ private:
 
     void parse_request(std::size_t bytes_transferred);
     Response_code process_data();
-    const char* create_response();
+    void create_response();
 
     Response_code process_sign_up_request();
     Response_code process_sign_in_request();
@@ -77,9 +85,12 @@ private:
     Response_code process_get_registered_contacts();
     Response_code process_remove_unregister_contact();
     Response_code process_remove_registered_contact();
+    Response_code process_stats_for_14_days();
     void insert_arr_of_contacts_in_jobj(QJsonObject& j_obj, const QString& reg_or_unreg_list_key_word);
+    void insert_stats_arr(QJsonObject& j_obj);
 
     bool fill_table(QSqlQuery& qry, const QString& nickname);
+    bool count_contacts_recursively(const QString& date, const QString& nick);
 
 public:
     Service(std::shared_ptr<boost::asio::ip::tcp::socket> sock, const QSqlDatabase& db);
