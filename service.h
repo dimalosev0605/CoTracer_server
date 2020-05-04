@@ -23,11 +23,10 @@ class Service
         sign_in,
         add_registered_user,
         add_unregistered_user,
-        get_unregistered_contacts,
-        get_registered_contacts,
         remove_unregister_contact,
         remove_register_contact,
-        stats_for_14_days
+        stats_for_14_days,
+        get_contacts
     };
 
     enum class Response_code: int {
@@ -38,11 +37,10 @@ class Service
         sign_in_failure,
         success_adding,
         such_user_not_exists,
-        unregistered_list,
-        registered_list,
         success_unregister_contact_deletion,
         success_register_contact_deletion,
-        success_fetch_stats_for_14_days
+        success_fetch_stats_for_14_days,
+        contacts_list
     };
 
     std::shared_ptr<boost::asio::ip::tcp::socket> m_socket;
@@ -59,6 +57,9 @@ class Service
     std::string m_contact_time;
     std::string m_contact_date;
     QString m_list;
+
+    QString m_reg_contacts_list;
+    QString m_unreg_contacts_list;
 
     std::set<QString> m_unique_reg_contacts;
     int m_unreg_contacts_counter = 0;
@@ -81,12 +82,12 @@ private:
     Response_code process_sign_in_request();
     Response_code process_add_unregistered_user_request();
     Response_code process_add_registered_user_request();
-    Response_code process_get_unregistered_contacts();
-    Response_code process_get_registered_contacts();
     Response_code process_remove_unregister_contact();
     Response_code process_remove_registered_contact();
     Response_code process_stats_for_14_days();
+    Response_code process_get_contacts();
     void insert_arr_of_contacts_in_jobj(QJsonObject& j_obj, const QString& reg_or_unreg_list_key_word);
+    void insert_arrs_of_contacts_in_jobj(QJsonObject& j_obj);
     void insert_stats_arr(QJsonObject& j_obj);
 
     bool fill_table(QSqlQuery& qry, const QString& nickname);

@@ -24,6 +24,8 @@ void Service::cleanup()
     m_contact_date.clear();
     m_list.clear();
     m_contacts_for_14_days.clear();
+    m_reg_contacts_list.clear();
+    m_unreg_contacts_list.clear();
 }
 
 void Service::start_handling()
@@ -31,6 +33,7 @@ void Service::start_handling()
     boost::asio::async_read_until(*m_socket.get(), m_request, "\r\n\r\n",
                                   [this](const boost::system::error_code& ec, std::size_t bytes_transferred)
     {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
         on_request_received(ec, bytes_transferred);
     });
 }
@@ -46,7 +49,7 @@ void Service::on_request_received(const boost::system::error_code& ec, std::size
         m_res_code = process_data();
         create_response();
 
-//        qDebug() << "m_response: " << m_response.c_str();
+        qDebug() << "m_response: " << m_response.c_str();
 
         boost::asio::async_write(*m_socket.get(), boost::asio::buffer(m_response),
                                  [this](const boost::system::error_code& ec, std::size_t bytes_transferred)
@@ -98,13 +101,13 @@ Service::Response_code Service::process_data()
         return process_add_registered_user_request();
     }
 
-    case Request_code::get_unregistered_contacts: {
-        return process_get_unregistered_contacts();
-    }
+//    case Request_code::get_unregistered_contacts: {
+//        return process_get_unregistered_contacts();
+//    }
 
-    case Request_code::get_registered_contacts: {
-        return process_get_registered_contacts();
-    }
+//    case Request_code::get_registered_contacts: {
+//        return process_get_registered_contacts();
+//    }
 
     case Request_code::remove_unregister_contact: {
         return process_remove_unregister_contact();
@@ -117,6 +120,9 @@ Service::Response_code Service::process_data()
     case Request_code::stats_for_14_days: {
         return process_stats_for_14_days();
     }
+    case Request_code::get_contacts: {
+        return process_get_contacts();
+    }
     }
 }
 
@@ -125,18 +131,21 @@ void Service::create_response()
     QJsonObject j_obj;
     j_obj.insert("response", (int)m_res_code);
 
-    if(m_res_code == Response_code::unregistered_list) {
-        insert_arr_of_contacts_in_jobj(j_obj, "unregistered_list");
-    }
+//    if(m_res_code == Response_code::unregistered_list) {
+//        insert_arr_of_contacts_in_jobj(j_obj, "unregistered_list");
+//    }
 
-    if(m_res_code == Response_code::registered_list) {
-        insert_arr_of_contacts_in_jobj(j_obj, "registered_list");
-    }
+//    if(m_res_code == Response_code::registered_list) {
+//        insert_arr_of_contacts_in_jobj(j_obj, "registered_list");
+//    }
 
     if(m_res_code == Response_code::success_fetch_stats_for_14_days) {
         insert_stats_arr(j_obj);
     }
 
+    if(m_res_code == Response_code::contacts_list) {
+        insert_arrs_of_contacts_in_jobj(j_obj);
+    }
 
     QJsonDocument j_doc(j_obj);
 //    qDebug() << "Response: " << j_doc.toJson().data();
@@ -266,25 +275,8 @@ Service::Response_code Service::process_add_registered_user_request()
     }
 }
 
-Service::Response_code Service::process_get_unregistered_contacts()
-{
-    QString str_qry = QString("select unregistered_contacts from %1 where date = '%2'")
-            .arg(QString::fromStdString(m_nickname)).arg(QString::fromStdString(m_contact_date));
 
-    if(m_qry.exec(str_qry)) {
-
-        while(m_qry.next()) {
-            m_list = m_qry.value(0).toString();
-        }
-        return Response_code::unregistered_list;
-
-    } else {
-        return Response_code::internal_server_error;
-    }
-
-}
-
-Service::Response_code Service::process_get_registered_contacts()
+Service::Response_code Service::process_get_contacts()
 {
     QString str_qry = QString("select registered_contacts from %1 where date = '%2'")
             .arg(QString::fromStdString(m_nickname)).arg(QString::fromStdString(m_contact_date));
@@ -292,9 +284,23 @@ Service::Response_code Service::process_get_registered_contacts()
     if(m_qry.exec(str_qry)) {
 
         while(m_qry.next()) {
-            m_list = m_qry.value(0).toString();
+            m_reg_contacts_list = m_qry.value(0).toString();
         }
-        return Response_code::registered_list;
+
+        str_qry = QString("select unregistered_contacts from %1 where date = '%2'")
+                .arg(QString::fromStdString(m_nickname)).arg(QString::fromStdString(m_contact_date));
+
+        if(m_qry.exec(str_qry)) {
+
+            while(m_qry.next()) {
+                m_unreg_contacts_list = m_qry.value(0).toString();
+            }
+
+            return Response_code::contacts_list;
+
+        } else {
+            return Response_code::internal_server_error;
+        }
 
     } else {
         return Response_code::internal_server_error;
@@ -410,10 +416,10 @@ Service::Response_code Service::process_stats_for_14_days()
             m_unique_reg_contacts.clear();
         }
 
-        qDebug() << "STATS:";
-        for(auto& i : m_contacts_for_14_days) {
-            qDebug() << std::get<0>(i) << " - " << std::get<1>(i) << " - " << std::get<2>(i);
-        }
+//        qDebug() << "STATS:";
+//        for(auto& i : m_contacts_for_14_days) {
+//            qDebug() << std::get<0>(i) << " - " << std::get<1>(i) << " - " << std::get<2>(i);
+//        }
 
         return Response_code::success_fetch_stats_for_14_days;
 
@@ -470,7 +476,13 @@ bool Service::count_contacts_recursively(const QString& date, const QString& nic
 
 void Service::insert_arr_of_contacts_in_jobj(QJsonObject& j_obj, const QString& reg_or_unreg_list_key_word)
 {
-    auto pairs_list = m_list.split(',', QString::SkipEmptyParts);
+    QStringList pairs_list;
+    if(reg_or_unreg_list_key_word == "unregistered_list") {
+        pairs_list = m_unreg_contacts_list.split(',', QString::SkipEmptyParts);
+    }
+    if(reg_or_unreg_list_key_word == "registered_list") {
+        pairs_list = m_reg_contacts_list.split(',', QString::SkipEmptyParts);
+    }
 
     QVector<QJsonObject> contacts_list;
     contacts_list.reserve(pairs_list.size());
@@ -489,6 +501,12 @@ void Service::insert_arr_of_contacts_in_jobj(QJsonObject& j_obj, const QString& 
     }
 
     j_obj.insert(reg_or_unreg_list_key_word, j_arr_of_contacts);
+}
+
+void Service::insert_arrs_of_contacts_in_jobj(QJsonObject& j_obj)
+{
+    insert_arr_of_contacts_in_jobj(j_obj, "unregistered_list");
+    insert_arr_of_contacts_in_jobj(j_obj, "registered_list");
 }
 
 void Service::insert_stats_arr(QJsonObject& j_obj)
