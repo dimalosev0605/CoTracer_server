@@ -11,6 +11,7 @@
 #include <QSqlError>
 #include <QThread>
 #include <QDate>
+#include <QFile>
 
 #include <boost/asio.hpp>
 
@@ -26,7 +27,8 @@ class Service
         remove_unregister_contact,
         remove_register_contact,
         stats_for_14_days,
-        get_contacts
+        get_contacts,
+        change_avatar
     };
 
     enum class Response_code: int {
@@ -40,7 +42,8 @@ class Service
         success_unregister_contact_deletion,
         success_register_contact_deletion,
         success_fetch_stats_for_14_days,
-        contacts_list
+        contacts_list,
+        success_avatar_changing
     };
 
     std::shared_ptr<boost::asio::ip::tcp::socket> m_socket;
@@ -65,6 +68,8 @@ class Service
     int m_unreg_contacts_counter = 0;
     QVector<std::tuple<QString, int , int>> m_contacts_for_14_days; // date, reg, unreg.
 
+    QByteArray m_avatar;
+
     QSqlQuery m_qry;
 
 private:
@@ -86,6 +91,7 @@ private:
     Response_code process_remove_registered_contact();
     Response_code process_stats_for_14_days();
     Response_code process_get_contacts();
+    Response_code process_change_avatar();
     void insert_arr_of_contacts_in_jobj(QJsonObject& j_obj, const QString& reg_or_unreg_list_key_word);
     void insert_arrs_of_contacts_in_jobj(QJsonObject& j_obj);
     void insert_stats_arr(QJsonObject& j_obj);

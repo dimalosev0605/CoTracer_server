@@ -30,4 +30,4 @@ add_executable(mhc_server_2
 )
 
 target_link_libraries(mhc_server_2 Qt5::Core Qt5::Sql)
-target_link_libraries(mhc_server_2 ${Boost_LIBRARIES})
+#target_link_libraries(mhc_server_2 ${Boost_LIBRARIES})

@@ -26,6 +26,7 @@ void Service::cleanup()
     m_contacts_for_14_days.clear();
     m_reg_contacts_list.clear();
     m_unreg_contacts_list.clear();
+    m_avatar.clear();
 }
 
 void Service::start_handling()
@@ -67,6 +68,7 @@ void Service::parse_request(std::size_t bytes_transferred)
     m_request.consume(bytes_transferred);
 
 //    qDebug() << "Raw data: " << QString::fromStdString(data);
+    qDebug() << "bytes_transferred = " << bytes_transferred;
 
     if(!j_doc.isEmpty()) {
         auto j_obj = j_doc.object();
@@ -77,6 +79,8 @@ void Service::parse_request(std::size_t bytes_transferred)
         m_contact_nickname = j_map["contact"].toString().toStdString();
         m_contact_time = j_map["time"].toString().toStdString();
         m_contact_date = j_map["date"].toString().toStdString();
+        QString str_avatar = j_map["avatar"].toString();
+        m_avatar = QByteArray::fromBase64(str_avatar.toLatin1());
     }
 
 }
@@ -122,6 +126,9 @@ Service::Response_code Service::process_data()
     }
     case Request_code::get_contacts: {
         return process_get_contacts();
+    }
+    case Request_code::change_avatar: {
+        return process_change_avatar();
     }
     }
 }
@@ -426,6 +433,25 @@ Service::Response_code Service::process_stats_for_14_days()
     } else {
         return Response_code::internal_server_error;
     }
+}
+
+Service::Response_code Service::process_change_avatar()
+{
+    QString avatar_name("/home/dima/Documents/Qt_projects/mhc_server_2_avatars/" + QString::fromStdString(m_nickname));
+    QFile file(avatar_name);
+    if(file.open(QIODevice::WriteOnly)) {
+        auto must_be_written = m_avatar.size();
+        auto written = file.write(m_avatar);
+        if(written != must_be_written) {
+            file.close();
+            return Response_code::internal_server_error;
+        }
+
+        file.close();
+        return Response_code::success_avatar_changing;
+    }
+
+    return Response_code::internal_server_error;
 }
 
 bool Service::count_contacts_recursively(const QString& date, const QString& nick)
