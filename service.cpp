@@ -50,7 +50,7 @@ void Service::on_request_received(const boost::system::error_code& ec, std::size
         m_res_code = process_data();
         create_response();
 
-        qDebug() << "m_response: " << m_response.c_str();
+//        qDebug() << "m_response: " << m_response.c_str();
 
         boost::asio::async_write(*m_socket.get(), boost::asio::buffer(m_response),
                                  [this](const boost::system::error_code& ec, std::size_t bytes_transferred)
@@ -105,14 +105,6 @@ Service::Response_code Service::process_data()
         return process_add_registered_user_request();
     }
 
-//    case Request_code::get_unregistered_contacts: {
-//        return process_get_unregistered_contacts();
-//    }
-
-//    case Request_code::get_registered_contacts: {
-//        return process_get_registered_contacts();
-//    }
-
     case Request_code::remove_unregister_contact: {
         return process_remove_unregister_contact();
     }
@@ -124,11 +116,17 @@ Service::Response_code Service::process_data()
     case Request_code::stats_for_14_days: {
         return process_stats_for_14_days();
     }
+
     case Request_code::get_contacts: {
         return process_get_contacts();
     }
+
     case Request_code::change_avatar: {
         return process_change_avatar();
+    }
+
+    case Request_code::get_my_avatar: {
+        return process_get_my_avatar();
     }
     }
 }
@@ -154,12 +152,22 @@ void Service::create_response()
         insert_arrs_of_contacts_in_jobj(j_obj);
     }
 
+    if(m_res_code == Response_code::success_fetching_avatar) {
+        insert_avatar(j_obj);
+    }
+
     QJsonDocument j_doc(j_obj);
 //    qDebug() << "Response: " << j_doc.toJson().data();
 
     std::string s = j_doc.toJson().data();
     s += "\r\n\r\n";
     m_response = s;
+}
+
+void Service::insert_avatar(QJsonObject& j_obj)
+{
+    j_obj.insert("avatar", QString::fromLatin1(m_avatar));
+    qDebug() << "AVATAR INSERTED!";
 }
 
 void Service::on_response_sent(const boost::system::error_code& ec)
@@ -454,6 +462,25 @@ Service::Response_code Service::process_change_avatar()
     return Response_code::internal_server_error;
 }
 
+Service::Response_code Service::process_get_my_avatar()
+{
+    QString file_path = "/home/dima/Documents/Qt_projects/mhc_server_2_avatars/" + QString::fromStdString(m_nickname);
+    QFile file(file_path);
+    if(file.open(QIODevice::ReadOnly)) {
+        QByteArray b_arr = file.readAll();
+        m_avatar = b_arr.toBase64();
+        file.close();
+        if(m_avatar.isEmpty()) return Response_code::internal_server_error;
+
+        qDebug() << "m_avatar.size()=" << m_avatar.size();
+
+        return Response_code::success_fetching_avatar;
+    }
+    else {
+        return Response_code::internal_server_error;
+    }
+}
+
 bool Service::count_contacts_recursively(const QString& date, const QString& nick)
 {
 //    qDebug() << "in f(): date = " << date << ", nick = " << nick;
@@ -529,10 +556,51 @@ void Service::insert_arr_of_contacts_in_jobj(QJsonObject& j_obj, const QString& 
     j_obj.insert(reg_or_unreg_list_key_word, j_arr_of_contacts);
 }
 
+void Service::insert_arr_of_avatars_in_jobj(QJsonObject& j_obj)
+{
+    auto pairs = m_reg_contacts_list.split(',', QString::SkipEmptyParts);
+    QVector<QString> reg_nicknames;
+
+    for(int i = 0; i < pairs.size(); ++i) {
+        auto pair = pairs[i].split('-', QString::SkipEmptyParts);
+        reg_nicknames.push_back(pair.first());
+    }
+
+    if(reg_nicknames.isEmpty()) return;
+    qDebug() << "size = " << reg_nicknames.size();
+
+    QString path_to_avatars_folder = "/home/dima/Documents/Qt_projects/mhc_server_2_avatars/";
+    QByteArray avatar_b_arr;
+    QByteArray base_64_avatar;
+    QJsonArray avatars;
+
+    for(int i = 0; i < reg_nicknames.size(); ++i) {
+
+        QFile avatar_file(path_to_avatars_folder + reg_nicknames[i]);
+        if(avatar_file.open(QIODevice::ReadOnly)) {
+            qDebug() << avatar_file.fileName() << " Was inserted!";
+            avatar_b_arr = avatar_file.readAll();
+            base_64_avatar = avatar_b_arr.toBase64();
+
+            QJsonObject avatar;
+            avatar.insert("nickname", reg_nicknames[i]);
+            avatar.insert("avatar", QString::fromLatin1(base_64_avatar));
+            avatars.append(avatar);
+        }
+        else {
+            qDebug() << avatar_file.fileName() << " was not opened";
+        }
+
+    }
+
+    j_obj.insert("avatars", avatars);
+}
+
 void Service::insert_arrs_of_contacts_in_jobj(QJsonObject& j_obj)
 {
     insert_arr_of_contacts_in_jobj(j_obj, "unregistered_list");
     insert_arr_of_contacts_in_jobj(j_obj, "registered_list");
+    insert_arr_of_avatars_in_jobj(j_obj);
 }
 
 void Service::insert_stats_arr(QJsonObject& j_obj)
