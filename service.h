@@ -29,7 +29,6 @@ class Service
         stats_for_14_days,
         get_contacts,
         change_avatar,
-        get_my_avatar
     };
 
     enum class Response_code: int {
@@ -45,7 +44,6 @@ class Service
         success_fetch_stats_for_14_days,
         contacts_list,
         success_avatar_changing,
-        success_fetching_avatar
     };
 
     std::shared_ptr<boost::asio::ip::tcp::socket> m_socket;
@@ -94,7 +92,7 @@ private:
     Response_code process_stats_for_14_days();
     Response_code process_get_contacts();
     Response_code process_change_avatar();
-    Response_code process_get_my_avatar();
+    void fetch_avatar();
     void insert_arr_of_contacts_in_jobj(QJsonObject& j_obj, const QString& reg_or_unreg_list_key_word);
     void insert_arr_of_avatars_in_jobj(QJsonObject& j_obj);
     void insert_arrs_of_contacts_in_jobj(QJsonObject& j_obj);

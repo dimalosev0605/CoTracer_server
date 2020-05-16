@@ -124,10 +124,6 @@ Service::Response_code Service::process_data()
     case Request_code::change_avatar: {
         return process_change_avatar();
     }
-
-    case Request_code::get_my_avatar: {
-        return process_get_my_avatar();
-    }
     }
 }
 
@@ -152,7 +148,8 @@ void Service::create_response()
         insert_arrs_of_contacts_in_jobj(j_obj);
     }
 
-    if(m_res_code == Response_code::success_fetching_avatar) {
+    if(m_res_code == Response_code::success_sign_in) {
+        fetch_avatar();
         insert_avatar(j_obj);
     }
 
@@ -462,22 +459,14 @@ Service::Response_code Service::process_change_avatar()
     return Response_code::internal_server_error;
 }
 
-Service::Response_code Service::process_get_my_avatar()
+void Service::fetch_avatar()
 {
     QString file_path = "/home/dima/Documents/Qt_projects/mhc_server_2_avatars/" + QString::fromStdString(m_nickname);
     QFile file(file_path);
     if(file.open(QIODevice::ReadOnly)) {
         QByteArray b_arr = file.readAll();
         m_avatar = b_arr.toBase64();
-        file.close();
-        if(m_avatar.isEmpty()) return Response_code::internal_server_error;
-
-        qDebug() << "m_avatar.size()=" << m_avatar.size();
-
-        return Response_code::success_fetching_avatar;
-    }
-    else {
-        return Response_code::internal_server_error;
+        qDebug() << "avatar size = " << m_avatar.size();
     }
 }
 
