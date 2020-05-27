@@ -124,6 +124,9 @@ Service::Response_code Service::process_data()
     case Request_code::change_avatar: {
         return process_change_avatar();
     }
+    case Request_code::change_password: {
+        return process_change_password();
+    }
     }
 }
 
@@ -467,6 +470,18 @@ void Service::fetch_avatar()
         QByteArray b_arr = file.readAll();
         m_avatar = b_arr.toBase64();
         qDebug() << "avatar size = " << m_avatar.size();
+    }
+}
+
+Service::Response_code Service::process_change_password()
+{
+    QString str_qry = QString("update main set user_password = '%1' where user_name = '%2'")
+            .arg(QString::fromStdString(m_password)).arg(QString::fromStdString(m_nickname));
+
+    if(m_qry.exec(str_qry)) {
+        return Response_code::success_password_changing;
+    } else {
+        return Response_code::internal_server_error;
     }
 }
 
