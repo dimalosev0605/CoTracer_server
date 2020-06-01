@@ -79,20 +79,17 @@ class Service
     Request_code m_req_code;
     Response_code m_res_code;
 
-    std::string m_nickname;
-    std::string m_password;
+    std::string m_user_nickname;
+    std::string m_user_password;
     std::string m_contact_nickname;
     std::string m_contact_time;
     std::string m_contact_date;
-    QString m_list;
 
-    QString m_reg_contacts_list;
-    QString m_unreg_contacts_list;
+    std::set<QString> m_unique_contacts;
+    QVector<std::tuple<QString, int>> m_stat_for_14_days; // date, count of contacts
 
-    std::set<QString> m_unique_reg_contacts;
-    QVector<std::tuple<QString, int>> m_contacts_for_14_days; // date, reg
-
-    QByteArray m_avatar;
+    QByteArray m_avatar_data;
+    QString m_cell_value;
 
 private:
     void on_finish();

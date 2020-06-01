@@ -23,16 +23,14 @@ void Service::on_finish()
 void Service::cleanup()
 {
     m_response.clear();
-    m_nickname.clear();
-    m_password.clear();
+    m_user_nickname.clear();
+    m_user_password.clear();
     m_contact_nickname.clear();
     m_contact_time.clear();
     m_contact_date.clear();
-    m_list.clear();
-    m_contacts_for_14_days.clear();
-    m_reg_contacts_list.clear();
-    m_unreg_contacts_list.clear();
-    m_avatar.clear();
+    m_cell_value.clear();
+    m_stat_for_14_days.clear();
+    m_avatar_data.clear();
 }
 
 void Service::on_request_received(const boost::system::error_code& ec, std::size_t bytes_transferred)
@@ -75,13 +73,15 @@ void Service::parse_request(std::size_t bytes_transferred)
         auto j_obj = j_doc.object();
         auto j_map = j_obj.toVariantMap();
         m_req_code = (Request_code)j_map[Protocol_keys::request_code].toInt();
-        m_nickname = j_map[Protocol_keys::user_nickname].toString().toStdString();
-        m_password = j_map[Protocol_keys::user_password].toString().toStdString();
+
+        m_user_nickname = j_map[Protocol_keys::user_nickname].toString().toStdString();
+        m_user_password = j_map[Protocol_keys::user_password].toString().toStdString();
         m_contact_nickname = j_map[Protocol_keys::contact_nickname].toString().toStdString();
         m_contact_time = j_map[Protocol_keys::contact_time].toString().toStdString();
         m_contact_date = j_map[Protocol_keys::contact_date].toString().toStdString();
+
         QString str_avatar = j_map[Protocol_keys::avatar_data].toString();
-        m_avatar = QByteArray::fromBase64(str_avatar.toLatin1());
+        m_avatar_data = QByteArray::fromBase64(str_avatar.toLatin1());
     }
 
 }
@@ -146,23 +146,23 @@ void Service::create_response()
 Service::Response_code Service::process_sign_up_request()
 {
     QString str_qry = QString("insert into main (user_name, user_password) values ('%1', '%2')")
-            .arg(QString::fromStdString(m_nickname)).arg(QString::fromStdString(m_password));
+            .arg(QString::fromStdString(m_user_nickname)).arg(QString::fromStdString(m_user_password));
 
     if(m_qry.exec(str_qry)) {
 
         str_qry = QString("create table %1 (date varchar(8) not null, registered_contacts text, unregistered_contacts text)")
-                .arg(QString::fromStdString(m_nickname));
+                .arg(QString::fromStdString(m_user_nickname));
 
         if(m_qry.exec(str_qry)) {
 
-            if(fill_table(m_qry, QString::fromStdString(m_nickname))) {
+            if(fill_table(m_qry, QString::fromStdString(m_user_nickname))) {
                 return Response_code::success_sign_up;
             } else {
-                str_qry = QString("drop table %1").arg(QString::fromStdString(m_nickname));
+                str_qry = QString("drop table %1").arg(QString::fromStdString(m_user_nickname));
                 m_qry.exec(str_qry);
 
                 str_qry = QString("delete from main where user_name = '%1'")
-                        .arg(QString::fromStdString(m_nickname));
+                        .arg(QString::fromStdString(m_user_nickname));
                 m_qry.exec(str_qry);
 
                 return Response_code::internal_server_error;
@@ -170,7 +170,7 @@ Service::Response_code Service::process_sign_up_request()
 
         } else {
             str_qry = QString("delete from main where user_name = '%1'")
-                    .arg(QString::fromStdString(m_nickname));
+                    .arg(QString::fromStdString(m_user_nickname));
             m_qry.exec(str_qry);
             return Response_code::internal_server_error;
         }
@@ -183,7 +183,7 @@ Service::Response_code Service::process_sign_up_request()
 Service::Response_code Service::process_sign_in_request()
 {
     QString str_qry = QString("select user_name, user_password from main where user_name = '%1' and user_password = '%2'")
-            .arg(QString::fromStdString(m_nickname)).arg(QString::fromStdString(m_password));
+            .arg(QString::fromStdString(m_user_nickname)).arg(QString::fromStdString(m_user_password));
 
     if(m_qry.exec(str_qry)) {
         if(m_qry.size()) {
@@ -206,7 +206,7 @@ Service::Response_code Service::process_add_contact_request()
         if(m_qry.size()) {
 
             str_qry = QString("update %1 set registered_contacts = registered_contacts || ',%2-%3' where date = '%4'")
-                    .arg(QString::fromStdString(m_nickname)).arg(QString::fromStdString(m_contact_nickname))
+                    .arg(QString::fromStdString(m_user_nickname)).arg(QString::fromStdString(m_contact_nickname))
                     .arg(QString::fromStdString(m_contact_time)).arg(QString::fromStdString(m_contact_date));
 
             if(m_qry.exec(str_qry)) {
@@ -227,7 +227,7 @@ Service::Response_code Service::process_add_contact_request()
 Service::Response_code Service::process_remove_contact_request()
 {
     QString str_qry = QString("select registered_contacts from %1 where date = '%2'")
-            .arg(QString::fromStdString(m_nickname)).arg(QString::fromStdString(m_contact_date));
+            .arg(QString::fromStdString(m_user_nickname)).arg(QString::fromStdString(m_contact_date));
 
     qDebug() << "qry: " << str_qry;
 
@@ -235,17 +235,17 @@ Service::Response_code Service::process_remove_contact_request()
     if(m_qry.exec(str_qry)) {
 
         while(m_qry.next()) {
-            m_list = m_qry.value(0).toString();
+            m_cell_value = m_qry.value(0).toString();
         }
 
         QString find_contact = "," + QString::fromStdString(m_contact_nickname)
                                + "-" + QString::fromStdString(m_contact_time);
 
-        auto old_str = m_list;
-        m_list = m_list.remove(find_contact);
+        auto old_str = m_cell_value;
+        m_cell_value = m_cell_value.remove(find_contact);
 
         str_qry = QString("update %1 set registered_contacts = '%2' where date = '%3'")
-                .arg(QString::fromStdString(m_nickname)).arg(m_list)
+                .arg(QString::fromStdString(m_user_nickname)).arg(m_cell_value)
                 .arg(QString::fromStdString(m_contact_date));
 
         if(m_qry.exec(str_qry)) {
@@ -261,7 +261,7 @@ Service::Response_code Service::process_remove_contact_request()
 
 Service::Response_code Service::process_fetch_stat_for_14_days_request()
 {
-    QString str_qry = QString("select date from %1").arg(QString::fromStdString(m_nickname));
+    QString str_qry = QString("select date from %1").arg(QString::fromStdString(m_user_nickname));
 
     if(m_qry.exec(str_qry)) {
 
@@ -273,16 +273,16 @@ Service::Response_code Service::process_fetch_stat_for_14_days_request()
 
 
         for(int i = 0; i < dates.size(); ++i) {
-            m_unique_reg_contacts.insert(QString::fromStdString(m_nickname));
-            if(!count_contacts_recursively(dates[i], QString::fromStdString(m_nickname))) {
-                m_unique_reg_contacts.clear();
+            m_unique_contacts.insert(QString::fromStdString(m_user_nickname));
+            if(!count_contacts_recursively(dates[i], QString::fromStdString(m_user_nickname))) {
+                m_unique_contacts.clear();
                 return Response_code::internal_server_error;
             }
 
-            m_unique_reg_contacts.erase(QString::fromStdString(m_nickname));
-            m_contacts_for_14_days.push_back(std::make_tuple(dates[i], m_unique_reg_contacts.size()));
+            m_unique_contacts.erase(QString::fromStdString(m_user_nickname));
+            m_stat_for_14_days.push_back(std::make_tuple(dates[i], m_unique_contacts.size()));
 
-            m_unique_reg_contacts.clear();
+            m_unique_contacts.clear();
         }
 
         return Response_code::success_fetching_stat_for_14_days;
@@ -300,7 +300,7 @@ Service::Response_code Service::process_fetch_contacts_request()
     if(m_qry.exec(str_qry)) {
 
         while(m_qry.next()) {
-            m_reg_contacts_list = m_qry.value(0).toString();
+            m_cell_value = m_qry.value(0).toString();
         }
 
         return Response_code::success_fetching_contacts;
@@ -311,11 +311,11 @@ Service::Response_code Service::process_fetch_contacts_request()
 
 Service::Response_code Service::process_change_avatar_request()
 {
-    QString avatar_name("/home/dima/Documents/Qt_projects/mhc_server_2_avatars/" + QString::fromStdString(m_nickname));
+    QString avatar_name("/home/dima/Documents/Qt_projects/mhc_server_2_avatars/" + QString::fromStdString(m_user_nickname));
     QFile file(avatar_name);
     if(file.open(QIODevice::WriteOnly)) {
-        auto must_be_written = m_avatar.size();
-        auto written = file.write(m_avatar);
+        auto must_be_written = m_avatar_data.size();
+        auto written = file.write(m_avatar_data);
         if(written != must_be_written) {
             file.close();
             return Response_code::internal_server_error;
@@ -331,7 +331,7 @@ Service::Response_code Service::process_change_avatar_request()
 Service::Response_code Service::process_change_password_request()
 {
     QString str_qry = QString("update main set user_password = '%1' where user_name = '%2'")
-            .arg(QString::fromStdString(m_password)).arg(QString::fromStdString(m_nickname));
+            .arg(QString::fromStdString(m_user_password)).arg(QString::fromStdString(m_user_nickname));
 
     if(m_qry.exec(str_qry)) {
         return Response_code::success_password_changing;
@@ -342,11 +342,11 @@ Service::Response_code Service::process_change_password_request()
 
 void Service::fetch_avatar()
 {
-    QString file_path = "/home/dima/Documents/Qt_projects/mhc_server_2_avatars/" + QString::fromStdString(m_nickname);
+    QString file_path = "/home/dima/Documents/Qt_projects/mhc_server_2_avatars/" + QString::fromStdString(m_user_nickname);
     QFile file(file_path);
     if(file.open(QIODevice::ReadOnly)) {
         QByteArray b_arr = file.readAll();
-        m_avatar = b_arr.toBase64();
+        m_avatar_data = b_arr.toBase64();
     }
 }
 
@@ -355,9 +355,9 @@ bool Service::count_contacts_recursively(const QString& date, const QString& nic
     QString str_qry = QString("select registered_contacts from %1 where date = '%2'").arg(nick).arg(date);
     m_qry.exec(str_qry);
     while(m_qry.next()) {
-        m_list = m_qry.value(0).toString();
+        m_cell_value = m_qry.value(0).toString();
     }
-    auto reg_list_pairs = m_list.split(',', QString::SkipEmptyParts);
+    auto reg_list_pairs = m_cell_value.split(',', QString::SkipEmptyParts);
 
     QVector<QString> reg_contacts_list;
     for(int i = 0; i < reg_list_pairs.size(); ++i) {
@@ -366,8 +366,8 @@ bool Service::count_contacts_recursively(const QString& date, const QString& nic
     }
 
     for(int i = 0; i < reg_contacts_list.size(); ++i) {
-        if(m_unique_reg_contacts.find(reg_contacts_list[i]) == m_unique_reg_contacts.end()) {
-            m_unique_reg_contacts.insert(reg_contacts_list[i]);
+        if(m_unique_contacts.find(reg_contacts_list[i]) == m_unique_contacts.end()) {
+            m_unique_contacts.insert(reg_contacts_list[i]);
             if(!count_contacts_recursively(date, reg_contacts_list[i])) {
                 return false;
             }
@@ -381,7 +381,7 @@ void Service::insert_arr_of_contacts_in_jobj(QJsonObject& j_obj)
 {
     QStringList pairs_list;
 
-    pairs_list = m_reg_contacts_list.split(',', QString::SkipEmptyParts);
+    pairs_list = m_cell_value.split(',', QString::SkipEmptyParts);
 
     QVector<QJsonObject> contacts_list;
     contacts_list.reserve(pairs_list.size());
@@ -404,7 +404,7 @@ void Service::insert_arr_of_contacts_in_jobj(QJsonObject& j_obj)
 
 void Service::insert_arr_of_avatars_in_jobj(QJsonObject& j_obj)
 {
-    auto pairs = m_reg_contacts_list.split(',', QString::SkipEmptyParts);
+    auto pairs = m_cell_value.split(',', QString::SkipEmptyParts);
     QVector<QString> reg_nicknames;
 
     for(int i = 0; i < pairs.size(); ++i) {
@@ -449,10 +449,10 @@ void Service::insert_stats_arr(QJsonObject& j_obj)
 {
     QJsonArray j_stats_arr;
 
-    for(int i = 0; i < m_contacts_for_14_days.size(); ++i) {
+    for(int i = 0; i < m_stat_for_14_days.size(); ++i) {
         QJsonObject day_stat;
-        day_stat.insert(Protocol_keys::stat_date, std::get<0>(m_contacts_for_14_days[i]));
-        day_stat.insert(Protocol_keys::quantity_of_contacts, std::get<1>(m_contacts_for_14_days[i]));
+        day_stat.insert(Protocol_keys::stat_date, std::get<0>(m_stat_for_14_days[i]));
+        day_stat.insert(Protocol_keys::quantity_of_contacts, std::get<1>(m_stat_for_14_days[i]));
         j_stats_arr.append(day_stat);
     }
     j_obj.insert(Protocol_keys::statistic_for_14_days, j_stats_arr);
@@ -460,7 +460,7 @@ void Service::insert_stats_arr(QJsonObject& j_obj)
 
 void Service::insert_avatar(QJsonObject& j_obj)
 {
-    j_obj.insert(Protocol_keys::avatar_data, QString::fromLatin1(m_avatar));
+    j_obj.insert(Protocol_keys::avatar_data, QString::fromLatin1(m_avatar_data));
 }
 
 
