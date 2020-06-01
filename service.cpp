@@ -155,7 +155,7 @@ Service::Response_code Service::process_sign_up_request()
 
     if(m_qry.exec(str_qry)) {
 
-        str_qry = QString("create table %1 (date varchar(8) not null, registered_contacts text, unregistered_contacts text)")
+        str_qry = QString("create table %1 (date varchar(8) not null, contacts text)")
                 .arg(QString::fromStdString(m_user_nickname));
 
         if(m_qry.exec(str_qry)) {
@@ -210,7 +210,7 @@ Service::Response_code Service::process_add_contact_request()
 
         if(m_qry.size()) {
 
-            str_qry = QString("update %1 set registered_contacts = registered_contacts || ',%2-%3' where date = '%4'")
+            str_qry = QString("update %1 set contacts = contacts || ',%2-%3' where date = '%4'")
                     .arg(QString::fromStdString(m_user_nickname)).arg(QString::fromStdString(m_contact_nickname))
                     .arg(QString::fromStdString(m_contact_time)).arg(QString::fromStdString(m_contact_date));
 
@@ -231,7 +231,7 @@ Service::Response_code Service::process_add_contact_request()
 
 Service::Response_code Service::process_remove_contact_request()
 {
-    QString str_qry = QString("select registered_contacts from %1 where date = '%2'")
+    QString str_qry = QString("select contacts from %1 where date = '%2'")
             .arg(QString::fromStdString(m_user_nickname)).arg(QString::fromStdString(m_contact_date));
 
     qDebug() << "qry: " << str_qry;
@@ -249,7 +249,7 @@ Service::Response_code Service::process_remove_contact_request()
         auto old_str = m_cell_value;
         m_cell_value = m_cell_value.remove(find_contact);
 
-        str_qry = QString("update %1 set registered_contacts = '%2' where date = '%3'")
+        str_qry = QString("update %1 set contacts = '%2' where date = '%3'")
                 .arg(QString::fromStdString(m_user_nickname)).arg(m_cell_value)
                 .arg(QString::fromStdString(m_contact_date));
 
@@ -299,7 +299,7 @@ Service::Response_code Service::process_fetch_stat_for_14_days_request()
 
 Service::Response_code Service::process_fetch_contacts_request()
 {
-    QString str_qry = QString("select registered_contacts from %1 where date = '%2'")
+    QString str_qry = QString("select contacts from %1 where date = '%2'")
             .arg(QString::fromStdString(m_contact_nickname)).arg(QString::fromStdString(m_contact_date));
 
     if(m_qry.exec(str_qry)) {
@@ -354,7 +354,7 @@ void Service::fetch_avatar()
 
 bool Service::count_contacts_recursively(const QString& date, const QString& nick)
 {
-    QString str_qry = QString("select registered_contacts from %1 where date = '%2'").arg(nick).arg(date);
+    QString str_qry = QString("select contacts from %1 where date = '%2'").arg(nick).arg(date);
     m_qry.exec(str_qry);
     while(m_qry.next()) {
         m_cell_value = m_qry.value(0).toString();
@@ -432,7 +432,7 @@ bool Service::fill_table(QSqlQuery& qry, const QString& nickname)
     const int count_of_days = 14;
     for(int i = 0; i < count_of_days; ++i) {
         QString str_date = curr_date.toString("dd.MM.yy");
-        QString str_qry = QString("insert into %1 (date, registered_contacts, unregistered_contacts) values('%2', '', '')")
+        QString str_qry = QString("insert into %1 (date, contacts) values('%2', '')")
                 .arg(nickname).arg(str_date);
         curr_date = curr_date.addDays(-1);
         if(!qry.exec(str_qry)) {
