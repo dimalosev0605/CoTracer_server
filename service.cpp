@@ -1,5 +1,7 @@
 #include "service.h"
 
+const QString path_to_avatars = "/home/dima/Documents/Qt_projects/mhc_server_2_avatars/";
+
 Service::Service(std::shared_ptr<boost::asio::ip::tcp::socket> socket, const QSqlDatabase& db)
     : m_socket(socket),
       m_qry(db)
@@ -73,13 +75,11 @@ void Service::parse_request(std::size_t bytes_transferred)
         auto j_obj = j_doc.object();
         auto j_map = j_obj.toVariantMap();
         m_req_code = (Request_code)j_map[Protocol_keys::request_code].toInt();
-
         m_user_nickname = j_map[Protocol_keys::user_nickname].toString().toStdString();
         m_user_password = j_map[Protocol_keys::user_password].toString().toStdString();
         m_contact_nickname = j_map[Protocol_keys::contact_nickname].toString().toStdString();
         m_contact_time = j_map[Protocol_keys::contact_time].toString().toStdString();
         m_contact_date = j_map[Protocol_keys::contact_date].toString().toStdString();
-
         QString str_avatar = j_map[Protocol_keys::avatar_data].toString();
         m_avatar_data = QByteArray::fromBase64(str_avatar.toLatin1());
     }
@@ -123,17 +123,22 @@ void Service::create_response()
     QJsonObject j_obj;
     j_obj.insert(Protocol_keys::response_code, (int)m_res_code);
 
-    if(m_res_code == Response_code::success_fetching_stat_for_14_days) {
-        insert_stats_arr(j_obj);
-    }
+    switch (m_res_code) {
 
-    if(m_res_code == Response_code::success_fetching_contacts) {
-        insert_arrs_of_contacts_in_jobj(j_obj);
-    }
-
-    if(m_res_code == Response_code::success_sign_in) {
+    case Response_code::success_sign_in: {
         fetch_avatar();
         insert_avatar(j_obj);
+        break;
+    }
+    case Response_code::success_fetching_stat_for_14_days: {
+        insert_stat_arr_in_j_obj(j_obj);
+        break;
+    }
+    case Response_code::success_fetching_contacts: {
+        insert_arr_of_contacts_in_j_obj(j_obj);
+        break;
+    }
+
     }
 
     QJsonDocument j_doc(j_obj);
@@ -311,7 +316,7 @@ Service::Response_code Service::process_fetch_contacts_request()
 
 Service::Response_code Service::process_change_avatar_request()
 {
-    QString avatar_name("/home/dima/Documents/Qt_projects/mhc_server_2_avatars/" + QString::fromStdString(m_user_nickname));
+    QString avatar_name(path_to_avatars + QString::fromStdString(m_user_nickname));
     QFile file(avatar_name);
     if(file.open(QIODevice::WriteOnly)) {
         auto must_be_written = m_avatar_data.size();
@@ -342,7 +347,7 @@ Service::Response_code Service::process_change_password_request()
 
 void Service::fetch_avatar()
 {
-    QString file_path = "/home/dima/Documents/Qt_projects/mhc_server_2_avatars/" + QString::fromStdString(m_user_nickname);
+    QString file_path = path_to_avatars + QString::fromStdString(m_user_nickname);
     QFile file(file_path);
     if(file.open(QIODevice::ReadOnly)) {
         QByteArray b_arr = file.readAll();
@@ -377,11 +382,9 @@ bool Service::count_contacts_recursively(const QString& date, const QString& nic
     return true;
 }
 
-void Service::insert_arr_of_contacts_in_jobj(QJsonObject& j_obj)
+void Service::insert_arr_of_contacts_in_j_obj(QJsonObject& j_obj)
 {
-    QStringList pairs_list;
-
-    pairs_list = m_cell_value.split(',', QString::SkipEmptyParts);
+    auto pairs_list = m_cell_value.split(',', QString::SkipEmptyParts);
 
     QVector<QJsonObject> contacts_list;
     contacts_list.reserve(pairs_list.size());
@@ -391,6 +394,13 @@ void Service::insert_arr_of_contacts_in_jobj(QJsonObject& j_obj)
         QJsonObject contact;
         contact.insert(Protocol_keys::contact_nickname, pair[0]);
         contact.insert(Protocol_keys::contact_time, pair[1]);
+
+        QFile avatar_file(path_to_avatars + pair[0]);
+        if(avatar_file.open(QIODevice::ReadOnly)) {
+            QByteArray avatar_b_arr = avatar_file.readAll();
+            QByteArray base_64_avatar = avatar_b_arr.toBase64();
+            contact.insert(Protocol_keys::avatar_data, QString::fromLatin1(base_64_avatar));
+        }
         contacts_list.push_back(contact);
     }
 
@@ -402,60 +412,17 @@ void Service::insert_arr_of_contacts_in_jobj(QJsonObject& j_obj)
     j_obj.insert(Protocol_keys::contact_list, j_arr_of_contacts);
 }
 
-void Service::insert_arr_of_avatars_in_jobj(QJsonObject& j_obj)
+
+void Service::insert_stat_arr_in_j_obj(QJsonObject& j_obj)
 {
-    auto pairs = m_cell_value.split(',', QString::SkipEmptyParts);
-    QVector<QString> reg_nicknames;
-
-    for(int i = 0; i < pairs.size(); ++i) {
-        auto pair = pairs[i].split('-', QString::SkipEmptyParts);
-        reg_nicknames.push_back(pair.first());
-    }
-
-    if(reg_nicknames.isEmpty()) return;
-
-    QString path_to_avatars_folder = "/home/dima/Documents/Qt_projects/mhc_server_2_avatars/";
-    QByteArray avatar_b_arr;
-    QByteArray base_64_avatar;
-    QJsonArray avatars;
-
-    for(int i = 0; i < reg_nicknames.size(); ++i) {
-
-        QFile avatar_file(path_to_avatars_folder + reg_nicknames[i]);
-        if(avatar_file.open(QIODevice::ReadOnly)) {
-            avatar_b_arr = avatar_file.readAll();
-            base_64_avatar = avatar_b_arr.toBase64();
-
-            QJsonObject avatar;
-            avatar.insert(Protocol_keys::contact_nickname, reg_nicknames[i]);
-            avatar.insert(Protocol_keys::avatar_data, QString::fromLatin1(base_64_avatar));
-            avatars.append(avatar);
-        }
-        else {
-        }
-
-    }
-
-    j_obj.insert(Protocol_keys::avatar_list, avatars);
-}
-
-void Service::insert_arrs_of_contacts_in_jobj(QJsonObject& j_obj)
-{
-    insert_arr_of_contacts_in_jobj(j_obj);
-    insert_arr_of_avatars_in_jobj(j_obj);
-}
-
-void Service::insert_stats_arr(QJsonObject& j_obj)
-{
-    QJsonArray j_stats_arr;
-
+    QJsonArray j_stat_arr;
     for(int i = 0; i < m_stat_for_14_days.size(); ++i) {
         QJsonObject day_stat;
         day_stat.insert(Protocol_keys::stat_date, std::get<0>(m_stat_for_14_days[i]));
         day_stat.insert(Protocol_keys::quantity_of_contacts, std::get<1>(m_stat_for_14_days[i]));
-        j_stats_arr.append(day_stat);
+        j_stat_arr.append(day_stat);
     }
-    j_obj.insert(Protocol_keys::statistic_for_14_days, j_stats_arr);
+    j_obj.insert(Protocol_keys::statistic_for_14_days, j_stat_arr);
 }
 
 void Service::insert_avatar(QJsonObject& j_obj)

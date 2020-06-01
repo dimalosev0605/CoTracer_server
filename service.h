@@ -114,10 +114,8 @@ private:
 
     // miscellaneous functions
     void fetch_avatar();
-    void insert_arr_of_contacts_in_jobj(QJsonObject& j_obj);
-    void insert_arr_of_avatars_in_jobj(QJsonObject& j_obj);
-    void insert_arrs_of_contacts_in_jobj(QJsonObject& j_obj);
-    void insert_stats_arr(QJsonObject& j_obj);
+    void insert_arr_of_contacts_in_j_obj(QJsonObject& j_obj);
+    void insert_stat_arr_in_j_obj(QJsonObject& j_obj);
 
     bool fill_table(QSqlQuery& qry, const QString& nickname);
     bool count_contacts_recursively(const QString& date, const QString& nick);
