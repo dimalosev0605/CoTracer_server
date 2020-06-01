@@ -30,9 +30,9 @@ void Service::cleanup()
     m_contact_nickname.clear();
     m_contact_time.clear();
     m_contact_date.clear();
-    m_cell_value.clear();
     m_stat_for_14_days.clear();
     m_avatar_data.clear();
+    m_cell_value.clear();
 }
 
 void Service::on_request_received(const boost::system::error_code& ec, std::size_t bytes_transferred)
@@ -322,11 +322,8 @@ Service::Response_code Service::process_change_avatar_request()
         auto must_be_written = m_avatar_data.size();
         auto written = file.write(m_avatar_data);
         if(written != must_be_written) {
-            file.close();
             return Response_code::internal_server_error;
         }
-
-        file.close();
         return Response_code::success_avatar_changing;
     }
 
@@ -412,7 +409,6 @@ void Service::insert_arr_of_contacts_in_j_obj(QJsonObject& j_obj)
     j_obj.insert(Protocol_keys::contact_list, j_arr_of_contacts);
 }
 
-
 void Service::insert_stat_arr_in_j_obj(QJsonObject& j_obj)
 {
     QJsonArray j_stat_arr;
@@ -429,7 +425,6 @@ void Service::insert_avatar(QJsonObject& j_obj)
 {
     j_obj.insert(Protocol_keys::avatar_data, QString::fromLatin1(m_avatar_data));
 }
-
 
 bool Service::fill_table(QSqlQuery& qry, const QString& nickname)
 {
