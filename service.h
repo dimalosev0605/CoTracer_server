@@ -17,17 +17,39 @@
 
 #include <set>
 
+namespace Protocol_keys {
+
+const QString user_nickname = "user_nickname";
+const QString user_password = "user_password";
+
+const QString request_code = "request_code";
+const QString response_code = "response_code";
+
+const QString contact_nickname = "contact_nickname";
+const QString contact_time = "contact_time";
+const QString contact_date = "contact_date";
+const QString contact_list = "contact_list";
+
+const QString statistic_for_14_days = "statistic_for_14_days";
+const QString quantity_of_contacts = "quantity_of_contacts";
+const QString stat_date = "stat_date";
+
+const QString avatar_data = "avatar_data";
+const QString avatar_list = "avatar_list";
+
+const QString end_of_message = "\r\n\r\n";
+
+}
+
 class Service
 {
     enum class Request_code: int {
         sign_up,
         sign_in,
-        add_registered_user,
-        add_unregistered_user,
-        remove_unregister_contact,
-        remove_register_contact,
-        stats_for_14_days,
-        get_contacts,
+        add_contact,
+        remove_contact,
+        fetch_stat_for_14_days,
+        fetch_contacts,
         change_avatar,
         change_password
     };
@@ -38,12 +60,11 @@ class Service
         sign_up_failure,
         success_sign_in,
         sign_in_failure,
-        success_adding,
-        such_user_not_exists,
-        success_unregister_contact_deletion,
-        success_register_contact_deletion,
-        success_fetch_stats_for_14_days,
-        contacts_list,
+        success_contact_adding,
+        such_contact_not_exists,
+        success_contact_deletion,
+        success_fetching_stat_for_14_days,
+        success_fetching_contacts,
         success_avatar_changing,
         success_password_changing
     };
@@ -52,6 +73,8 @@ class Service
 
     std::string m_response;
     boost::asio::streambuf m_request;
+
+    QSqlQuery m_qry;
 
     Request_code m_req_code;
     Response_code m_res_code;
@@ -67,12 +90,9 @@ class Service
     QString m_unreg_contacts_list;
 
     std::set<QString> m_unique_reg_contacts;
-    int m_unreg_contacts_counter = 0;
-    QVector<std::tuple<QString, int , int>> m_contacts_for_14_days; // date, reg, unreg.
+    QVector<std::tuple<QString, int>> m_contacts_for_14_days; // date, reg
 
     QByteArray m_avatar;
-
-    QSqlQuery m_qry;
 
 private:
     void on_finish();
@@ -85,18 +105,19 @@ private:
     Response_code process_data();
     void create_response();
 
+    // process request functions
     Response_code process_sign_up_request();
     Response_code process_sign_in_request();
-    Response_code process_add_unregistered_user_request();
-    Response_code process_add_registered_user_request();
-    Response_code process_remove_unregister_contact();
-    Response_code process_remove_registered_contact();
-    Response_code process_stats_for_14_days();
-    Response_code process_get_contacts();
-    Response_code process_change_avatar();
-    Response_code process_change_password();
+    Response_code process_add_contact_request();
+    Response_code process_remove_contact_request();
+    Response_code process_fetch_stat_for_14_days_request();
+    Response_code process_fetch_contacts_request();
+    Response_code process_change_avatar_request();
+    Response_code process_change_password_request();
+
+    // miscellaneous functions
     void fetch_avatar();
-    void insert_arr_of_contacts_in_jobj(QJsonObject& j_obj, const QString& reg_or_unreg_list_key_word);
+    void insert_arr_of_contacts_in_jobj(QJsonObject& j_obj);
     void insert_arr_of_avatars_in_jobj(QJsonObject& j_obj);
     void insert_arrs_of_contacts_in_jobj(QJsonObject& j_obj);
     void insert_stats_arr(QJsonObject& j_obj);
