@@ -91,7 +91,7 @@ void Server::daily_script()
         }
 
         QString insert_date_str = QDate::currentDate().toString("dd.MM.yy");
-        QString insert_row_qry = QString("insert into %1 (date, registered_contacts, unregistered_contacts) values ('%2', '', '')");
+        QString insert_row_qry = QString("insert into %1 (date, contacts) values ('%2', '')");
 
 
         //
