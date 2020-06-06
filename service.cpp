@@ -398,19 +398,7 @@ void Service::process_change_avatar_request(const QMap<QString, QVariant>& reque
             response_j_obj.insert(Protocol_keys::response_code, (int)res_code);
             return;
         }
-        QFileInfo file_info(avatar_name);
-        QString time = file_info.lastModified().toString(avatar_loaded_time_format);
-
-        QString str_qry = QString("update main set avatar_loaded_time = '%1' where user_name = '%2'")
-                .arg(time).arg(user_nickname);
-
-        if(m_qry.exec(str_qry)) {
-            res_code = Response_code::success_avatar_changing;
-        }
-        else {
-            file.remove(avatar_name);
-            res_code = Response_code::internal_server_error;
-        }
+        res_code = Response_code::success_avatar_changing;
     }
     else {
         res_code = Response_code::internal_server_error;
