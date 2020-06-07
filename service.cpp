@@ -1,7 +1,6 @@
 #include "service.h"
 
 const QString path_to_avatars = "/home/dima/Documents/Qt_projects/mhc_server_2_avatars/";
-const QString avatar_loaded_time_format = "dd.MM.yy-hh:mm:ss";
 const QString date_format = "dd.MM.yy";
 
 Service::Service(std::shared_ptr<boost::asio::ip::tcp::socket> socket, const QSqlDatabase& db)
@@ -333,6 +332,20 @@ void Service::process_fetch_contacts_request(const QMap<QString, QVariant>& requ
 {
     QString contact_nickname = request_map[Protocol_keys::contact_nickname].toString();
     QString contact_date = request_map[Protocol_keys::contact_date].toString();
+
+    // make vec of cached avars
+    auto cached_avatars = request_map[Protocol_keys::cached_avatars].toJsonArray();
+    std::vector<std::tuple<QString, QDateTime>> cached_avatars_v;
+    for(int i = 0; i < cached_avatars.size(); ++i) {
+        auto obj = cached_avatars[i].toObject();
+        auto map = obj.toVariantMap();
+        QString contact_nickname = map[Protocol_keys::contact_nickname].toString();
+        QDateTime avatar_downloaded_time = QDateTime::fromString(map[Protocol_keys::avatar_downloaded_date_time].toString(),
+                Protocol_keys::avatar_downloaded_date_time_format);
+        cached_avatars_v.push_back(std::make_tuple(contact_nickname, avatar_downloaded_time));
+    }
+    // end make vec of cached avars
+
     Response_code res_code;
 
     QString str_qry = QString("select contacts from %1 where date = '%2'").arg(contact_nickname).arg(contact_date);
@@ -358,12 +371,49 @@ void Service::process_fetch_contacts_request(const QMap<QString, QVariant>& requ
             contact.insert(Protocol_keys::contact_nickname, pair[0]);
             contact.insert(Protocol_keys::contact_time, pair[1]);
 
-            QFile avatar_file(path_to_avatars + pair[0]);
-            if(avatar_file.open(QIODevice::ReadOnly)) {
-                QByteArray avatar_b_arr = avatar_file.readAll();
-                QByteArray base_64_avatar = avatar_b_arr.toBase64();
-                contact.insert(Protocol_keys::avatar_data, QString::fromLatin1(base_64_avatar));
+            //
+            QFileInfo avatar_file_info(path_to_avatars + pair[0]);
+            QDateTime uploaded_on_server_time = avatar_file_info.lastModified();
+            auto iter = std::find_if(cached_avatars_v.begin(), cached_avatars_v.end(), [&](const std::tuple<QString, QDateTime>& i)
+            {
+                return pair[0] == std::get<0>(i);
+            });
+            if(iter != cached_avatars_v.end())
+            {
+                // if cached -> check time
+                qDebug() << "Avatar " << pair[0] << " in cache, check time:";
+                if(uploaded_on_server_time > std::get<1>(*iter))
+                {
+                    qDebug() << "Time expired, insert data";
+                    // if expired -> insert avatar data and downloaded time
+                    QFile avatar_file(path_to_avatars + pair[0]);
+                    if(avatar_file.open(QIODevice::ReadOnly)) {
+                        QByteArray avatar_b_arr = avatar_file.readAll();
+                        QByteArray base_64_avatar = avatar_b_arr.toBase64();
+                        contact.insert(Protocol_keys::avatar_data, QString::fromLatin1(base_64_avatar));
+                        contact.insert(Protocol_keys::avatar_downloaded_date_time,
+                                       QDateTime::currentDateTime().toString(Protocol_keys::avatar_downloaded_date_time_format));
+                    }
+                }
+                else {
+                    qDebug() << "Time not expired!";
+                }
             }
+            else
+            {
+                qDebug() << "Avatar " << pair[0] << " not cached, Insert data";
+                // if not cached insert data and downloaded time
+                QFile avatar_file(path_to_avatars + pair[0]);
+                if(avatar_file.open(QIODevice::ReadOnly)) {
+                    QByteArray avatar_b_arr = avatar_file.readAll();
+                    QByteArray base_64_avatar = avatar_b_arr.toBase64();
+                    contact.insert(Protocol_keys::avatar_data, QString::fromLatin1(base_64_avatar));
+                    contact.insert(Protocol_keys::avatar_downloaded_date_time,
+                                   QDateTime::currentDateTime().toString(Protocol_keys::avatar_downloaded_date_time_format));
+                }
+            }
+            //
+
             contacts_list.push_back(contact);
         }
 

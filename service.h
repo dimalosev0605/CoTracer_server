@@ -36,12 +36,12 @@ const QString statistic_for_14_days = "statistic_for_14_days";
 const QString quantity_of_contacts = "quantity_of_contacts";
 const QString stat_date = "stat_date";
 
+const QString cached_avatars = "cached_avatars";
 const QString avatar_data = "avatar_data";
+const QString avatar_downloaded_date_time = "avatar_downloaded_date_time";
+const QString avatar_downloaded_date_time_format = "dd.MM.yyyy-hh:mm:ss";
 
 const QString end_of_message = "\r\n\r\n";
-
-const QString cached_avatars = "cached_avatars";
-const QString avatar_loaded_time = "avatar_loaded_time";
 
 }
 
