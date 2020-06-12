@@ -40,6 +40,7 @@ const QString cached_avatars = "cached_avatars";
 const QString avatar_data = "avatar_data";
 const QString avatar_downloaded_date_time = "avatar_downloaded_date_time";
 const QString avatar_downloaded_date_time_format = "dd.MM.yyyy-hh:mm:ss";
+const QString deleted_avatar = "000";
 
 const QString end_of_message = "\r\n\r\n";
 
@@ -55,6 +56,7 @@ class Service
         fetch_stat_for_14_days,
         fetch_contacts,
         change_avatar,
+        set_default_avatar,
         change_password
     };
 
@@ -70,7 +72,8 @@ class Service
         success_fetching_stat_for_14_days,
         success_fetching_contacts,
         success_avatar_changing,
-        success_password_changing
+        success_password_changing,
+        success_setting_default_avatar
     };
 
     std::shared_ptr<boost::asio::ip::tcp::socket> m_socket;
@@ -98,6 +101,7 @@ private:
     void process_fetch_stat_for_14_days_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj);
     void process_fetch_contacts_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj);
     void process_change_avatar_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj);
+    void process_set_default_avatar_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj);
     void process_change_password_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj);
 
     // miscellaneous functions

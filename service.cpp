@@ -110,6 +110,10 @@ void Service::process_data(const QMap<QString, QVariant>& request_map, QJsonObje
         process_change_avatar_request(request_map, response_j_obj);
         break;
     }
+    case Request_code::set_default_avatar: {
+        process_set_default_avatar_request(request_map, response_j_obj);
+        break;
+    }
     case Request_code::change_password: {
         process_change_password_request(request_map, response_j_obj);
         break;
@@ -380,6 +384,13 @@ void Service::process_fetch_contacts_request(const QMap<QString, QVariant>& requ
             });
             if(iter != cached_avatars_v.end())
             {
+                // if avatar in cache, but it was deleted
+                if(!avatar_file_info.exists()) {
+                    contact.insert(Protocol_keys::avatar_downloaded_date_time, Protocol_keys::deleted_avatar);
+                    contacts_list.push_back(contact);
+                    continue;
+                }
+
                 // if cached -> check time
                 qDebug() << "Avatar " << pair[0] << " in cache, check time:";
                 if(uploaded_on_server_time > std::get<1>(*iter))
@@ -454,6 +465,22 @@ void Service::process_change_avatar_request(const QMap<QString, QVariant>& reque
         res_code = Response_code::internal_server_error;
     }
 
+    response_j_obj.insert(Protocol_keys::response_code, (int)res_code);
+}
+
+void Service::process_set_default_avatar_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj)
+{
+    auto user_nickname = request_map[Protocol_keys::user_nickname].toString();
+    Response_code res_code;
+
+    QString avatar_path = path_to_avatars + user_nickname;
+    QFile file(avatar_path);
+    if(file.remove()) {
+        res_code = Response_code::success_setting_default_avatar;
+    }
+    else {
+        res_code = Response_code::internal_server_error;
+    }
     response_j_obj.insert(Protocol_keys::response_code, (int)res_code);
 }
 
