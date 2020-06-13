@@ -210,6 +210,7 @@ void Service::process_add_contact_request(const QMap<QString, QVariant>& request
     QString contact_nickname = request_map[Protocol_keys::contact_nickname].toString();
     QString contact_time = request_map[Protocol_keys::contact_time].toString();
     QString contact_date = request_map[Protocol_keys::contact_date].toString();
+    bool is_contact_avatar_cached = request_map[Protocol_keys::is_contact_avatar_cached].toBool();
     Response_code res_code;
 
     QString str_qry = QString("select from main where user_name = '%1'").arg(contact_nickname);
@@ -222,6 +223,16 @@ void Service::process_add_contact_request(const QMap<QString, QVariant>& request
                     .arg(user_nickname).arg(contact_nickname).arg(contact_time).arg(contact_date);
             if(m_qry.exec(str_qry)) {
                 res_code = Response_code::success_contact_adding;
+                if(!is_contact_avatar_cached) {
+                    QFile contact_avatar(path_to_avatars + contact_nickname);
+                    if(contact_avatar.open(QIODevice::ReadOnly)) {
+                        QByteArray avatar_b_arr = contact_avatar.readAll();
+                        QByteArray base_64_avatar = avatar_b_arr.toBase64();
+                        response_j_obj.insert(Protocol_keys::avatar_data, QString::fromLatin1(base_64_avatar));
+                        response_j_obj.insert(Protocol_keys::avatar_downloaded_date_time,
+                                              QDateTime::currentDateTime().toString(Protocol_keys::avatar_downloaded_date_time_format));
+                    }
+                }
             } else {
                 res_code = Response_code::internal_server_error;
             }
