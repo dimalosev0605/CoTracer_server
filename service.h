@@ -43,6 +43,9 @@ const QString avatar_downloaded_date_time = "avatar_downloaded_date_time";
 const QString avatar_downloaded_date_time_format = "dd.MM.yyyy-hh:mm:ss";
 const QString deleted_avatar = "000";
 
+const QString found_users = "found_users";
+const QString friend_nickname = "friend_nickname";
+
 const QString end_of_message = "\r\n\r\n";
 
 }
@@ -58,7 +61,9 @@ class Service
         fetch_contacts,
         change_avatar,
         set_default_avatar,
-        change_password
+        change_password,
+        find_friends,
+        add_in_my_friends
     };
 
     enum class Response_code: int {
@@ -74,7 +79,9 @@ class Service
         success_fetching_contacts,
         success_avatar_changing,
         success_password_changing,
-        success_setting_default_avatar
+        success_setting_default_avatar,
+        success_find_friends,
+        success_friend_adding
     };
 
     std::shared_ptr<boost::asio::ip::tcp::socket> m_socket;
@@ -104,6 +111,8 @@ private:
     void process_change_avatar_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj);
     void process_set_default_avatar_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj);
     void process_change_password_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj);
+    void process_find_friends_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj);
+    void process_add_in_my_friends_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj);
 
     // miscellaneous functions
     bool fill_table(QSqlQuery& qry, const QString& nickname);

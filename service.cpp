@@ -118,6 +118,14 @@ void Service::process_data(const QMap<QString, QVariant>& request_map, QJsonObje
         process_change_password_request(request_map, response_j_obj);
         break;
     }
+    case Request_code::find_friends: {
+        process_find_friends_request(request_map, response_j_obj);
+        break;
+    }
+    case Request_code::add_in_my_friends: {
+        process_add_in_my_friends_request(request_map, response_j_obj);
+        break;
+    }
 
     }
 }
@@ -129,7 +137,7 @@ void Service::process_sign_up_request(const QMap<QString, QVariant>& request_map
     QString user_password = request_map[Protocol_keys::user_password].toString();
     Response_code res_code;
 
-    QString str_qry = QString("insert into main (user_name, user_password) values ('%1', '%2')")
+    QString str_qry = QString("insert into main (user_name, user_password, friends) values ('%1', '%2', '')")
             .arg(user_nickname).arg(user_password);
 
     if(m_qry.exec(str_qry))
@@ -507,6 +515,98 @@ void Service::process_change_password_request(const QMap<QString, QVariant>& req
     if(m_qry.exec(str_qry)) {
         res_code = Response_code::success_password_changing;
     } else {
+        res_code = Response_code::internal_server_error;
+    }
+
+    response_j_obj.insert(Protocol_keys::response_code, (int)res_code);
+}
+
+void Service::process_find_friends_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj)
+{
+    auto nickname = request_map[Protocol_keys::user_nickname].toString();
+    Response_code res_code;
+
+    auto str_qry = QString("select user_name from main");
+    if(m_qry.exec(str_qry)) {
+        res_code = Response_code::success_find_friends;
+
+        QVector<QString> all_users;
+        while(m_qry.next()) {
+            all_users.push_back(m_qry.value(0).toString());
+        }
+
+        QVector<QString> found_users;
+
+        for(int i = 0; i < all_users.size(); ++i) {
+            if(all_users[i].startsWith(nickname)) {
+                found_users.push_back(all_users[i]);
+            }
+        }
+
+        QJsonArray found_users_j_arr;
+        for(int i = 0; i < found_users.size(); ++i) {
+            QJsonObject obj;
+            obj.insert(Protocol_keys::user_nickname, found_users[i]);
+
+            QString avatar_file_path = path_to_avatars + found_users[i];
+            QFile file(avatar_file_path);
+            if(file.open(QIODevice::ReadOnly)) {
+                QByteArray b_arr = file.readAll();
+                QByteArray base_64_arr = b_arr.toBase64();
+                obj.insert(Protocol_keys::avatar_data, QString::fromLatin1(base_64_arr));
+            }
+            found_users_j_arr.append(obj);
+        }
+
+        response_j_obj.insert(Protocol_keys::found_users, found_users_j_arr);
+    }
+    else {
+        res_code = Response_code::internal_server_error;
+    }
+
+    response_j_obj.insert(Protocol_keys::response_code, (int)res_code);
+}
+
+void Service::process_add_in_my_friends_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj)
+{
+    auto user_nickname = request_map[Protocol_keys::user_nickname].toString();
+    auto new_friend_nickname = request_map[Protocol_keys::friend_nickname].toString();
+    Response_code res_code;
+
+    auto str_qry = QString("select friends from main where user_name = '%1'").arg(user_nickname);
+    if(m_qry.exec(str_qry)) {
+
+        QString cell_value;
+        while(m_qry.next()) {
+            cell_value = m_qry.value(0).toString();
+        }
+
+        auto friends = cell_value.split(',',  QString::SkipEmptyParts);
+
+        auto iter = std::find(friends.begin(), friends.end(), new_friend_nickname);
+        if(iter == friends.end()) {
+            friends.push_back(new_friend_nickname);
+        }
+        else {
+        }
+
+        QString new_cell_value;
+        for(int i = 0; i < friends.size(); ++i) {
+            new_cell_value.push_back(friends[i] + ',');
+        }
+
+        str_qry = QString("update main set friends = '%1' where user_name = '%2'")
+                .arg(new_cell_value).arg(user_nickname);
+
+        if(m_qry.exec(str_qry)) {
+            res_code = Response_code::success_friend_adding;
+        }
+        else {
+            res_code = Response_code::internal_server_error;
+        }
+
+    }
+    else {
         res_code = Response_code::internal_server_error;
     }
 
