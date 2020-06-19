@@ -126,6 +126,10 @@ void Service::process_data(const QMap<QString, QVariant>& request_map, QJsonObje
         process_add_in_my_friends_request(request_map, response_j_obj);
         break;
     }
+    case Request_code::remove_from_my_friends: {
+        process_remove_from_my_friends_request(request_map, response_j_obj);
+        break;
+    }
 
     }
 }
@@ -198,6 +202,42 @@ void Service::process_sign_in_request(const QMap<QString, QVariant>& request_map
                 response_j_obj.insert(Protocol_keys::avatar_data, QString::fromLatin1(base_64_arr));
             }
             // end fetch avatar
+
+
+            str_qry = QString("select friends from main where user_name = '%1'").arg(user_nickname);
+
+            if(m_qry.exec(str_qry)) {
+
+                QString cell_value;
+                while(m_qry.next()) {
+                    cell_value = m_qry.value(0).toString();
+                }
+
+                if(!cell_value.isEmpty()) {
+                    QJsonArray friends_arr;
+                    auto friends_list = cell_value.split(',', QString::SkipEmptyParts);
+                    for(int i = 0; i < friends_list.size(); ++i) {
+                        QJsonObject obj;
+                        obj.insert(Protocol_keys::friend_nickname, friends_list[i]);
+                        QString avatar_path = path_to_avatars + friends_list[i];
+                        QFile file(avatar_path);
+                        if(file.open(QIODevice::ReadOnly)) {
+                            QByteArray b_arr = file.readAll();
+                            QByteArray base_64_arr = b_arr.toBase64();
+                            obj.insert(Protocol_keys::avatar_data, QString::fromLatin1(base_64_arr));
+                        }
+                        friends_arr.append(obj);
+                    }
+
+                    response_j_obj.insert(Protocol_keys::friends_list, friends_arr);
+
+                }
+
+            }
+            else {
+                // TODO
+            }
+
         }
         else
         {
@@ -218,7 +258,7 @@ void Service::process_add_contact_request(const QMap<QString, QVariant>& request
     QString contact_nickname = request_map[Protocol_keys::contact_nickname].toString();
     QString contact_time = request_map[Protocol_keys::contact_time].toString();
     QString contact_date = request_map[Protocol_keys::contact_date].toString();
-    bool is_contact_avatar_cached = request_map[Protocol_keys::is_contact_avatar_cached].toBool();
+    bool is_cached = request_map[Protocol_keys::is_cached].toBool();
     Response_code res_code;
 
     QString str_qry = QString("select from main where user_name = '%1'").arg(contact_nickname);
@@ -231,7 +271,7 @@ void Service::process_add_contact_request(const QMap<QString, QVariant>& request
                     .arg(user_nickname).arg(contact_nickname).arg(contact_time).arg(contact_date);
             if(m_qry.exec(str_qry)) {
                 res_code = Response_code::success_contact_adding;
-                if(!is_contact_avatar_cached) {
+                if(!is_cached) {
                     QFile contact_avatar(path_to_avatars + contact_nickname);
                     if(contact_avatar.open(QIODevice::ReadOnly)) {
                         QByteArray avatar_b_arr = contact_avatar.readAll();
@@ -605,6 +645,65 @@ void Service::process_add_in_my_friends_request(const QMap<QString, QVariant>& r
             res_code = Response_code::internal_server_error;
         }
 
+    }
+    else {
+        res_code = Response_code::internal_server_error;
+    }
+
+    response_j_obj.insert(Protocol_keys::response_code, (int)res_code);
+}
+
+void Service::process_remove_from_my_friends_request(const QMap<QString, QVariant>& request_map, QJsonObject& response_j_obj)
+{
+    qDebug() << "In process_remove_from_my_friends_request";
+
+    auto user_nickname = request_map[Protocol_keys::user_nickname].toString();
+    auto friend_nick = request_map[Protocol_keys::friend_nickname].toString();
+    Response_code res_code;
+
+    auto str_qry = QString("select friends from main where user_name = '%1'").arg(user_nickname);
+
+    if(m_qry.exec(str_qry)) {
+
+        QString cell_value;
+        while(m_qry.next()) {
+            cell_value = m_qry.value(0).toString();
+        }
+
+        auto friends = cell_value.split(',',  QString::SkipEmptyParts).toVector();
+
+        if(!friends.isEmpty()) {
+            qDebug() << "friends in not empty!";
+            qDebug() << "friend_nick = " << friend_nick;
+            auto iter = std::find(friends.begin(), friends.end(), friend_nick);
+            if(iter != friends.end()) {
+                friends.erase(iter);
+
+                QString new_cell_value;
+                for(int i = 0; i < friends.size(); ++i) {
+                    new_cell_value.push_back(friends[i] + ',');
+                }
+
+                qDebug() << "new cell value = " << new_cell_value;
+
+                str_qry = QString("update main set friends = '%1' where user_name = '%2'")
+                        .arg(new_cell_value).arg(user_nickname);
+
+                if(m_qry.exec(str_qry)) {
+                    res_code = Response_code::success_friend_removing;
+                }
+                else {
+                    res_code = Response_code::internal_server_error;
+                }
+
+            }
+            else {
+                res_code = Response_code::success_friend_removing;
+            }
+        }
+        else {
+            res_code = Response_code::success_friend_removing;
+        }
     }
     else {
         res_code = Response_code::internal_server_error;
