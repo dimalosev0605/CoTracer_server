@@ -1,6 +1,6 @@
 #include "service.h"
 
-const QString path_to_avatars = "/home/dima/Documents/Qt_projects/mhc_server_2_avatars/";
+const QString path_to_avatars = "/home/dima/Documents/Qt_projects/CoTracer_avatars/";
 const QString date_format = "dd.MM.yy";
 
 Service::Service(std::shared_ptr<boost::asio::ip::tcp::socket> socket, const QSqlDatabase& db)
